@@ -11,6 +11,8 @@ import (
 
     "github.com/ghodss/yaml"
     "github.com/ericchiang/k8s"
+    "github.com/ericchiang/k8s/api/v1"
+    metav1 "github.com/ericchiang/k8s/apis/meta/v1"
 )
 
 // loadClient parses a kubeconfig from a file and returns a Kubernetes
@@ -50,6 +52,7 @@ func main() {
     }
 
 
+
     var client *k8s.Client
 
     if kubernetes_host != "" || in_cluster == "True" {
@@ -70,14 +73,56 @@ func main() {
                     Client: &http.Client{} }
     }
 
+//need sanity check to see if there's existing external-lb functionality, or maybe at least an overridable option to exit out if not running on minikube.
+
     svc, err := client.CoreV1().ListServices(context.Background(), "")
     if err != nil {
         log.Fatal(err)
     }
     for _, svc := range svc.Items {
-        //fmt.Println(reflect.TypeOf(svc.Status.LoadBalancer.Ingress))
         if *svc.Spec.Type == "LoadBalancer" && len(svc.Status.LoadBalancer.Ingress) == 0 {
           fmt.Printf("Service %q has no ingress for its loadbalancer\n", *svc.Metadata.Name)
+
+            var ingresses []*v1.LoadBalancerIngress
+	    ingresses = append(ingresses, &v1.LoadBalancerIngress{Ip: svc.Spec.ClusterIP })
+		//servicetype := "ClusterIP"
+		//servicename := "oop"
+
+
+		service := &v1.Service{
+                Metadata: &metav1.ObjectMeta{
+                        Name:      svc.Metadata.Name,
+			//Name:      &servicename,
+                        Namespace: svc.Metadata.Namespace,
+			ResourceVersion: svc.Metadata.ResourceVersion,
+                },
+                Status: &v1.ServiceStatus{
+			LoadBalancer: &v1.LoadBalancerStatus{
+				Ingress: ingresses,
+			},
+		},
+	               	Spec: &v1.ServiceSpec{
+				ClusterIP: svc.Spec.ClusterIP,
+				Ports: svc.Spec.Ports,
+				Type: svc.Spec.Type,
+		},
+
+          }
+          fmt.Printf("Service: %v\n", service)
+          //client.CoreV1().UpdateService(context.TODO(), service)
+		//client.CoreV1().CreateService(context.TODO(), service)
+		boop, err := client.CoreV1().UpdateService(context.TODO(), service)
+		if apiErr, ok := err.(*k8s.APIError); ok {
+			// Resource already exists. Carry on.
+			if apiErr.Code == http.StatusConflict {
+				fmt.Println("Service Already Exists")
+			}
+			fmt.Println(apiErr)
+			fmt.Println(boop)
+		}
+		fmt.Errorf("create service: %v", err)
+		fmt.Println(boop)
+
         } else if *svc.Spec.Type == "LoadBalancer" {
            fmt.Printf("Service %q has IP %v for its loadbalancer\n", *svc.Metadata.Name, *svc.Status.LoadBalancer.Ingress[0].Ip) //need to check for hostnames and other types too.
         } else {
