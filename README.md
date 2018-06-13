@@ -6,10 +6,10 @@ This guide will show you how to access services within your minikube instance.
 
 First, we will need to add a route to minikube.
 
-This oneliner gets the ClusterIP range from etcd and adds a route.
+This oneliner gets the ClusterIP range from minikube's config and adds a route.
 
 ```
-sudo route -n add -net $(minikube ssh  --  sudo docker run -i --rm --net=host quay.io/coreos/etcd:v3.2 etcdctl  get /registry/ranges/serviceips  | jq -r '.range') $(minikube ip)
+sudo route -n add -net $(cat ~/.minikube/profiles/minikube/config.json | jq -r ".KubernetesConfig.ServiceCIDR") $(minikube ip)
 ```
 
 To test, deploy nginx.
@@ -61,5 +61,5 @@ To undo all this:
 kubectl  delete deployment nginx
 kubectl  delete svc nginx
 kubectl  delete deployment minikube-lb-patch -nkube-system
-sudo route -n delete -net $(minikube ssh  --  sudo docker run -i --rm --net=host quay.io/coreos/etcd:v3.2 etcdctl  get /registry/ranges/serviceips  | jq -r '.range') $(minikube ip)
+sudo route -n delete -net $(cat ~/.minikube/profiles/minikube/config.json | jq -r ".KubernetesConfig.ServiceCIDR") $(minikube ip)
 ```
